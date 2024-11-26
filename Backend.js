@@ -1,77 +1,68 @@
-const WebSocket = require('ws');
-const http = require('http');
-const express = require('express');
-const cors = require('cors');
+const express = require("express");
+const http = require("http");
+const socketIo = require("socket.io");
+const cors = require("cors");
 
-// Create an Express app and enable CORS
+// Create app and server
 const app = express();
-app.use(cors());
-
-// HTTP server to handle both HTTP and WebSocket connections
 const server = http.createServer(app);
 
-// WebSocket server attached to the HTTP server
-const wss = new WebSocket.Server({ server });
-
-// WebSocket functionality
-wss.on('connection', (ws) => {
-  console.log('WebSocket: A client connected');
-
-  ws.on('message', (message) => {
-    try {
-      console.log('WebSocket received:', message);
-      // Example: Echo the message back to the WebSocket client
-      ws.send(`Echo: ${message}`);
-    } catch (error) {
-      console.error('Error processing message:', error.message);
-    }
-  });
-
-  ws.on('error', (err) => {
-    console.error('WebSocket error:', err.message);
-  });
-
-  ws.on('close', () => {
-    console.log('WebSocket: A client disconnected');
-  });
-});
-
-// Socket.IO functionality
-const socketIo = require('socket.io');
+// Socket.IO setup
 const io = socketIo(server, {
   cors: {
-    origin: '*', // Allow all origins for testing (update for production)
-    methods: ['GET', 'POST'],
+    origin: "https://fyproject-2b48f.firebaseapp.com", // Allow requests from your deployed client
+    methods: ["GET", "POST"],
   },
 });
 
-let users = []; // Store all users' locations
+// Middleware
+app.use(cors());
 
-io.on('connection', (socket) => {
-  console.log('Socket.IO: A user connected:', socket.id);
+// Port configuration
+const PORT = process.env.PORT || 10000;
 
-  socket.on('user-location', (data) => {
-    const userIndex = users.findIndex((user) => user.id === data.id);
-    if (userIndex > -1) {
-      users[userIndex] = data; // Update user's location
+// Store user locations in-memory (this could be replaced with a database for persistence)
+let users = [];
+
+// Socket.IO event handlers
+io.on("connection", (socket) => {
+  console.log("Socket.IO: A user connected:", socket.id);
+
+  // Handle user location updates
+  socket.on("user-location", (data) => {
+    if (!data || !data.lat || !data.lng) {
+      console.error("Invalid location data received:", data);
+      return;
+    }
+    
+    console.log("Received user location:", data);
+
+    // Update the user's location in the list
+    const existingUser = users.find((user) => user.id === socket.id);
+    if (existingUser) {
+      existingUser.lat = data.lat;
+      existingUser.lng = data.lng;
     } else {
-      users.push(data); // Add new user
+      users.push({ id: socket.id, lat: data.lat, lng: data.lng });
     }
 
-    console.log('User Locations (Socket.IO):', users);
-
-    io.emit('user-location-update', users); // Broadcast updated locations
+    // Emit updated user list to all clients
+    io.emit("update", { users });
   });
 
-  socket.on('disconnect', () => {
-    console.log('Socket.IO: A user disconnected:', socket.id);
-    users = users.filter((user) => user.id !== socket.id); // Remove user
-    io.emit('user-location-update', users);
+  // Handle user disconnection
+  socket.on("disconnect", () => {
+    console.log("Socket.IO: A user disconnected:", socket.id);
+
+    // Remove user from the list
+    users = users.filter((user) => user.id !== socket.id);
+
+    // Notify remaining clients
+    io.emit("update", { users });
   });
 });
 
-// Start the server
-const PORT = process.env.PORT || 3000;
+// Start server
 server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
