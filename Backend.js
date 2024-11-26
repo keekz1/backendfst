@@ -1,36 +1,19 @@
 const WebSocket = require('ws');
+const http = require('http');
 
-// Set port from environment or default to 8080
-const port = process.env.PORT || 8080;
+// Create an HTTP server to handle WebSocket connections
+const server = http.createServer();
+const wss = new WebSocket.Server({ server });
 
-// Create a WebSocket server that listens on the specified port
-const wss = new WebSocket.Server({ port: port });
-
-let users = [];
-
-// Handle new connections to the WebSocket server
-wss.on('connection', ws => {
-  console.log('A new user connected.');
-
-  // Handle incoming messages
+wss.on('connection', (ws) => {
+  console.log('A client connected');
   ws.on('message', (message) => {
-    const data = JSON.parse(message);
-    const user = { id: data.id, lat: data.lat, lng: data.lng };
-    users = users.filter(u => u.id !== data.id);
-    users.push(user);
-
-    // Broadcast the updated user list to all clients
-    wss.clients.forEach(client => {
-      if (client !== ws && client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify(users));
-      }
-    });
-  });
-
-  ws.on('close', () => {
-    users = users.filter(user => user.ws !== ws);
-    console.log('A user disconnected.');
+    console.log('received: %s', message);
   });
 });
 
-console.log(`WebSocket server is running on port ${port}`);
+// Get the port from environment variable or use a default
+const port = process.env.PORT || 8080;
+server.listen(port, () => {
+  console.log(`Server is listening on port ${port}`);
+});
