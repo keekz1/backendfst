@@ -28,9 +28,6 @@ let users = [];
 io.on("connection", (socket) => {
   console.log("Socket.IO: A user connected:", socket.id);
 
-  // Send the current users list to the newly connected user
-  socket.emit("current-users", users);
-
   // Handle user location updates
   socket.on("user-location", (data) => {
     if (!data || !data.lat || !data.lng) {
@@ -40,14 +37,13 @@ io.on("connection", (socket) => {
 
     console.log("Received user location:", data);
 
-    // Check if the user already exists and update their location, or add a new user if it's their first time
+    // Check if the user already exists and update their location
     const existingUser = users.find((user) => user.id === socket.id);
     if (existingUser) {
-      // Update the user's location
       existingUser.lat = data.lat;
       existingUser.lng = data.lng;
     } else {
-      // Add new user with location
+      // If not found, create a new user record
       users.push({ id: socket.id, lat: data.lat, lng: data.lng });
     }
 
