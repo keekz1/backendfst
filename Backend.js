@@ -26,7 +26,7 @@ let users = [];
 
 // Socket.IO event handlers
 io.on("connection", (socket) => {
-  console.log("Socket.IO: A user connected:", socket.id);
+  console.log(`Socket.IO: A user connected with ID: ${socket.id}`);
 
   // Handle user location updates
   socket.on("user-location", (data) => {
@@ -35,7 +35,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    console.log("Received user location:", data);
+    console.log(`Received user location update: ID ${socket.id} - Lat: ${data.lat}, Lng: ${data.lng}`);
 
     // Check if the user already exists and update their location
     const existingUser = users.find((user) => user.id === socket.id);
@@ -43,7 +43,7 @@ io.on("connection", (socket) => {
       existingUser.lat = data.lat;
       existingUser.lng = data.lng;
     } else {
-      // If not found, create a new user record
+      // If the user does not exist, add them to the list
       users.push({ id: socket.id, lat: data.lat, lng: data.lng });
     }
 
@@ -53,12 +53,12 @@ io.on("connection", (socket) => {
 
   // Handle user disconnection
   socket.on("disconnect", () => {
-    console.log("Socket.IO: A user disconnected:", socket.id);
+    console.log(`Socket.IO: A user disconnected with ID: ${socket.id}`);
 
-    // Remove user from the list
+    // Remove the user from the list
     users = users.filter((user) => user.id !== socket.id);
 
-    // Notify remaining clients
+    // Notify remaining clients about the updated user list
     io.emit("update", { users });
   });
 });
