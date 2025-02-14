@@ -3,32 +3,27 @@ const http = require("http");
 const socketIo = require("socket.io");
 const cors = require("cors");
 
-// Create app and server
 const app = express();
 const server = http.createServer(app);
 
-// Socket.IO setup
 const io = socketIo(server, {
   cors: {
-    origin: "https://fyproject-2b48f.firebaseapp.com", // Allow requests from your deployed client
+    origin: "https://fyproject-2b48f.firebaseapp.com",
     methods: ["GET", "POST"],
   },
 });
 
-// Middleware
 app.use(cors());
 
-// Port configuration
 const PORT = process.env.PORT || 10000;
 
-// Store user locations in-memory (this could be replaced with a database for persistence)
 let users = [];
+let messages = {}; // Store messages per room
 
-// Socket.IO event handlers
 io.on("connection", (socket) => {
   console.log(`Socket.IO: A user connected with ID: ${socket.id}`);
 
-  // Handle user location updates
+  // Location tracking
   socket.on("user-location", (data) => {
     if (!data || !data.lat || !data.lng) {
       console.error("Invalid location data received:", data);
@@ -37,33 +32,52 @@ io.on("connection", (socket) => {
 
     console.log(`Received user location update: ID ${socket.id} - Lat: ${data.lat}, Lng: ${data.lng}`);
 
-    // Check if the user already exists and update their location
     const existingUser = users.find((user) => user.id === socket.id);
     if (existingUser) {
       existingUser.lat = data.lat;
       existingUser.lng = data.lng;
     } else {
-      // If the user does not exist, add them to the list
       users.push({ id: socket.id, lat: data.lat, lng: data.lng });
     }
 
-    // Emit updated user list to all clients
     io.emit("update", { users });
   });
 
-  // Handle user disconnection
+  // Chat system
+  socket.on("join-room", (room) => {
+    socket.join(room);
+    console.log(`User ${socket.id} joined room: ${room}`);
+
+    // Send existing messages to the new user
+    if (messages[room]) {
+      socket.emit("chat-history", messages[room]);
+    } else {
+      messages[room] = [];
+    }
+  });
+
+  socket.on("send-message", ({ room, message, username }) => {
+    const newMessage = {
+      user: username,
+      text: message,
+      time: new Date().toLocaleTimeString(),
+    };
+
+    // Save message in the room's history
+    messages[room].push(newMessage);
+
+    // Broadcast the message to others in the same room
+    io.to(room).emit("receive-message", newMessage);
+  });
+
   socket.on("disconnect", () => {
     console.log(`Socket.IO: A user disconnected with ID: ${socket.id}`);
 
-    // Remove the user from the list
     users = users.filter((user) => user.id !== socket.id);
-
-    // Notify remaining clients about the updated user list
     io.emit("update", { users });
   });
 });
 
-// Start server
 server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
 });
