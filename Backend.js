@@ -21,19 +21,6 @@ let users = [];
 let messages = {}; // Store messages per room
 let friends = {}; // Store friendships
 
-// Function to calculate distance between two lat/lng points (in km)
-const getDistance = (lat1, lon1, lat2, lon2) => {
-  const R = 6371; // Radius of the Earth in km
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return R * c; // Distance in km
-};
-
 // Handle user connection
 io.on("connection", (socket) => {
   console.log(`Socket.IO: A user connected with ID: ${socket.id}`);
@@ -55,17 +42,7 @@ io.on("connection", (socket) => {
       users.push({ id: socket.id, lat: data.lat, lng: data.lng });
     }
 
-    // Find nearby users
-    const nearbyUsers = users.filter((user) => {
-      if (user.id !== socket.id) {
-        const distance = getDistance(data.lat, data.lng, user.lat, user.lng);
-        return distance <= 10; // 10 km radius (adjust as needed)
-      }
-      return false;
-    });
-
-    // Send the nearby users to the frontend
-    io.to(socket.id).emit("nearby-users", nearbyUsers);
+    io.emit("update", { users });
   });
 
   // Handle user joining with username
