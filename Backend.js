@@ -8,7 +8,7 @@ const server = http.createServer(app);
 
 const io = socketIo(server, {
   cors: {
-    origin: "http://localhost:3001", // Your frontend URL
+    origin: "http://localhost:3000", // Your frontend URL
     methods: ["GET", "POST"],
   },
 });
@@ -43,7 +43,7 @@ io.on("connection", (socket) => {
     }
 
     // Emit the updated users list to all clients
-    io.emit("update", { users });
+    io.emit("nearby-users", users); // Emit all users' location info
   });
 
   // Handle user disconnection
@@ -54,7 +54,7 @@ io.on("connection", (socket) => {
     users = users.filter((user) => user.id !== socket.id);
 
     // Emit the updated users list to all remaining clients
-    io.emit("update", { users });
+    io.emit("nearby-users", users); // Emit the updated list to remaining clients
   });
 });
 
