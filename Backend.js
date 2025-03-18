@@ -8,7 +8,7 @@ const server = http.createServer(app);
 
 const io = socketIo(server, {
   cors: {
-    origin: "https://fyproject-2b48f.firebaseapp.com", 
+    origin: "http://localhost:3001", 
     methods: ["GET", "POST"],
   },
 });
@@ -18,10 +18,11 @@ app.use(cors());
 const PORT = process.env.PORT || 10000;
 
 let users = [];
-
+let messages = [];
 io.on("connection", (socket) => {
   console.log(`Socket.IO: A user connected with ID: ${socket.id}`);
 
+  // Listen for user location updates
   socket.on("user-location", (data) => {
     if (!data || !data.lat || !data.lng) {
       console.error("Invalid location data received:", data);
@@ -41,11 +42,16 @@ io.on("connection", (socket) => {
     io.emit("update", { users });
   });
 
+
+
+  // Handle user disconnection
   socket.on("disconnect", () => {
     console.log(`Socket.IO: A user disconnected with ID: ${socket.id}`);
 
+    // Remove user from the list when disconnected
     users = users.filter((user) => user.id !== socket.id);
 
+    // Broadcast the updated users list to all clients
     io.emit("update", { users });
   });
 });
