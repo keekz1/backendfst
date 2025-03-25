@@ -8,7 +8,10 @@ const server = http.createServer(app);
 
 const io = socketIo(server, {
   cors: {
-    origin: "http://localhost:3000", // Your frontend URL
+    origin: [
+      "https://fyproject-2b48f.web.app", // Production frontend URL
+      "http://localhost:3000"            // Localhost frontend URL
+    ],
     methods: ["GET", "POST"],
   },
 });
