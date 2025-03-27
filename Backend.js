@@ -9,8 +9,8 @@ const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
     origin: [
-      "https://fyproject-2b48f.web.app", // Production frontend URL
-      "http://localhost:3000"            // Localhost frontend URL
+      "https://fyproject-2b48f.web.app",
+      "http://localhost:3000"
     ],
     methods: ["GET", "POST"],
   },
@@ -20,11 +20,18 @@ app.use(cors());
 
 const PORT = process.env.PORT || 10000;
 
-let users = []; // Array to hold all users with their location (id, lat, lng)
-let messages = []; // Optional: Store messages if you plan to add a chat feature
+let users = []; // Now stores { id, lat, lng, isVisible }
 
 io.on("connection", (socket) => {
   console.log(`Socket.IO: A user connected with ID: ${socket.id}`);
+
+  // Initialize new user with default visibility
+  users.push({
+    id: socket.id,
+    lat: null,
+    lng: null,
+    isVisible: true
+  });
 
   // Listen for user location updates
   socket.on("user-location", (data) => {
@@ -33,32 +40,47 @@ io.on("connection", (socket) => {
       return;
     }
 
-    console.log(`Received user location update: ID ${socket.id} - Lat: ${data.lat}, Lng: ${data.lng}`);
-
-    // Check if the user already exists, if so update their location
-    const existingUser = users.find((user) => user.id === socket.id);
-    if (existingUser) {
-      existingUser.lat = data.lat;
-      existingUser.lng = data.lng;
-    } else {
-      // Add new user if they don't exist in the users array
-      users.push({ id: socket.id, lat: data.lat, lng: data.lng });
+    const user = users.find(u => u.id === socket.id);
+    if (user) {
+      user.lat = data.lat;
+      user.lng = data.lng;
+      user.isVisible = true; // Automatically make visible when updating location
+      broadcastValidUsers();
     }
-
-    // Emit the updated users list to all clients
-    io.emit("nearby-users", users); // Emit all users' location info
   });
 
-  // Handle user disconnection
+  // New handler for visibility changes
+  socket.on("visibility-change", (isVisible) => {
+    const user = users.find(u => u.id === socket.id);
+    if (user) {
+      user.isVisible = isVisible;
+      broadcastValidUsers();
+    }
+  });
+
+  // New handler for direct removal requests
+  socket.on("remove-user", () => {
+    users = users.filter(u => u.id !== socket.id);
+    broadcastValidUsers();
+  });
+
+  // Handle disconnection
   socket.on("disconnect", () => {
     console.log(`Socket.IO: A user disconnected with ID: ${socket.id}`);
-
-    // Remove the user from the list when disconnected
-    users = users.filter((user) => user.id !== socket.id);
-
-    // Emit the updated users list to all remaining clients
-    io.emit("nearby-users", users); // Emit the updated list to remaining clients
+    users = users.filter(u => u.id !== socket.id);
+    broadcastValidUsers();
   });
+
+  // Helper function to broadcast valid users
+  function broadcastValidUsers() {
+    const validUsers = users.filter(user => 
+      user.isVisible && 
+      user.lat !== null && 
+      user.lng !== null
+    );
+    
+    io.emit("nearby-users", validUsers);
+  }
 });
 
 server.listen(PORT, () => {
