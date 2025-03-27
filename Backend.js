@@ -9,7 +9,6 @@ const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
     origin: [
-      "https://fyproject-2b48f.web.app",
       "http://localhost:3000"
     ],
     methods: ["GET", "POST"],
