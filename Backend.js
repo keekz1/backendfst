@@ -19,13 +19,12 @@ const io = socketIo(server, {
 app.use(cors());
 
 const PORT = process.env.PORT || 10000;
-
-let users = []; // Now stores { id, lat, lng, isVisible }
+let users = [];
 
 io.on("connection", (socket) => {
-  console.log(`Socket.IO: A user connected with ID: ${socket.id}`);
+  console.log(`User connected: ${socket.id}`);
 
-  // Initialize new user with default visibility
+  // Initialize user with visible: true
   users.push({
     id: socket.id,
     lat: null,
@@ -33,46 +32,34 @@ io.on("connection", (socket) => {
     isVisible: true
   });
 
-  // Listen for user location updates
   socket.on("user-location", (data) => {
-    if (!data || !data.lat || !data.lng) {
-      console.error("Invalid location data received:", data);
-      return;
-    }
+    if (!data?.lat || !data?.lng) return;
 
     const user = users.find(u => u.id === socket.id);
     if (user) {
       user.lat = data.lat;
       user.lng = data.lng;
-      user.isVisible = true; // Automatically make visible when updating location
-      broadcastValidUsers();
+      user.isVisible = true; // Force visible when location updates
+      broadcastUsers();
     }
   });
 
-  // New handler for visibility changes
   socket.on("visibility-change", (isVisible) => {
     const user = users.find(u => u.id === socket.id);
     if (user) {
       user.isVisible = isVisible;
-      broadcastValidUsers();
+      broadcastUsers();
     }
   });
 
-  // New handler for direct removal requests
-  socket.on("remove-user", () => {
-    users = users.filter(u => u.id !== socket.id);
-    broadcastValidUsers();
-  });
-
-  // Handle disconnection
   socket.on("disconnect", () => {
-    console.log(`Socket.IO: A user disconnected with ID: ${socket.id}`);
     users = users.filter(u => u.id !== socket.id);
-    broadcastValidUsers();
+    broadcastUsers();
+    console.log(`User disconnected: ${socket.id}`);
   });
 
-  // Helper function to broadcast valid users
-  function broadcastValidUsers() {
+  function broadcastUsers() {
+    // Filter valid visible users
     const validUsers = users.filter(user => 
       user.isVisible && 
       user.lat !== null && 
@@ -84,5 +71,5 @@ io.on("connection", (socket) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
