@@ -28,20 +28,24 @@ io.on("connection", (socket) => {
     id: socket.id,
     lat: null,
     lng: null,
-    isVisible: true
+    isVisible: true,
+    role: 'user' // Set default role, you can adjust this logic as needed
+
   });
 
   socket.on("user-location", (data) => {
-    if (!data?.lat || !data?.lng) return;
+    if (!data?.lat || !data?.lng || !data?.role) return;
 
     const user = users.find(u => u.id === socket.id);
     if (user) {
       user.lat = data.lat;
       user.lng = data.lng;
-      user.isVisible = true; // Force visible when location updates
+      user.role = data.role;  // Update the user's role
+      user.isVisible = true;  // Ensure the user is visible when location updates
       broadcastUsers();
     }
   });
+
 
   socket.on("visibility-change", (isVisible) => {
     const user = users.find(u => u.id === socket.id);
@@ -57,12 +61,14 @@ io.on("connection", (socket) => {
     console.log(`User disconnected: ${socket.id}`);
   });
 
+
   function broadcastUsers() {
-    // Filter valid visible users
+    // Filter valid visible users with valid lat, lng, and role
     const validUsers = users.filter(user => 
       user.isVisible && 
       user.lat !== null && 
-      user.lng !== null
+      user.lng !== null &&
+      user.role !== null  // Ensure role is not null
     );
     
     io.emit("nearby-users", validUsers);
