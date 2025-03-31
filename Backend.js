@@ -30,7 +30,9 @@ io.on("connection", (socket) => {
     lng: null,
     isVisible: true,
     name: 'Anonymous', // Default name
-    role: 'user' // Set default role, you can adjust this logic as needed
+    role: 'user', // Set default role, you can adjust this logic as needed
+    image: '' // Add an empty string for the image field
+
 
   });
 
@@ -44,6 +46,8 @@ io.on("connection", (socket) => {
       user.role = data.role;  // Update the user's role
       user.name = data.name; // Update name
       user.isVisible = true;  // Ensure the user is visible when location updates
+      user.image = data.image; // Update image
+
       broadcastUsers();
     }
   });
@@ -71,7 +75,9 @@ io.on("connection", (socket) => {
       user.lat !== null && 
       user.lng !== null &&
       user.name !== null &&// Ensure name is not null
-      user.role !== null  // Ensure role is not null
+      user.role !== null && // Ensure role is not null
+      user.image !== null  // Ensure role is not null
+
     );
     
     io.emit("nearby-users", validUsers);
