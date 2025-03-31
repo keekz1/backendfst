@@ -29,6 +29,7 @@ io.on("connection", (socket) => {
     lat: null,
     lng: null,
     isVisible: true,
+    name: 'Anonymous', // Default name
     role: 'user' // Set default role, you can adjust this logic as needed
 
   });
@@ -41,6 +42,7 @@ io.on("connection", (socket) => {
       user.lat = data.lat;
       user.lng = data.lng;
       user.role = data.role;  // Update the user's role
+      user.name = data.name; // Update name
       user.isVisible = true;  // Ensure the user is visible when location updates
       broadcastUsers();
     }
@@ -68,6 +70,7 @@ io.on("connection", (socket) => {
       user.isVisible && 
       user.lat !== null && 
       user.lng !== null &&
+      user.name !== null &&// Ensure name is not null
       user.role !== null  // Ensure role is not null
     );
     
