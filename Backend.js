@@ -8,56 +8,33 @@ const server = http.createServer(app);
 
 const io = socketIo(server, {
   cors: {
-    origin: ["https://synchro-kappa.vercel.app", "https://localhost:3000"],
+    origin: ["https://synchro-kappa.vercel.app",           "https://localhost:3000"
+    ],
+          
+
     methods: ["GET", "POST"],
   },
 });
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json()); // Add this line to parse JSON request bodies
 
 const PORT = process.env.PORT || 10000;
 let users = [];
-let tickets = [];
-
-// Track active connections
-const activeConnections = new Set();
-
-// Cleanup inactive users periodically
-setInterval(() => {
-  const now = Date.now();
-  users = users.filter(user => {
-    // Keep users who:
-    // 1. Are still connected OR
-    // 2. Disconnected recently (within last 5 minutes)
-    return activeConnections.has(user.id) || 
-           (user.lastSeen && now - user.lastSeen < 300000); // 5 minutes
-  });
-  broadcastUsers();
-}, 60000); // Check every minute
+let tickets = []; // Array to store tickets
 
 io.on("connection", (socket) => {
   console.log(`User connected: ${socket.id}`);
-  activeConnections.add(socket.id);
 
-  // Check if this is a reconnection of an existing user
-  const existingUser = users.find(u => u.id === socket.id);
-  if (!existingUser) {
-    users.push({
-      id: socket.id,
-      lat: null,
-      lng: null,
-      isVisible: true,
-      isConnected: true,
-      name: "Anonymous",
-      role: "user",
-      image: "",
-      lastSeen: Date.now()
-    });
-  } else {
-    existingUser.isConnected = true;
-    existingUser.lastSeen = Date.now();
-  }
+  users.push({
+    id: socket.id,
+    lat: null,
+    lng: null,
+    isVisible: true,
+    name: "Anonymous",
+    role: "user",
+    image: "",
+  });
 
   socket.on("user-location", (data) => {
     if (!data?.lat || !data?.lng || !data?.role) return;
@@ -70,7 +47,6 @@ io.on("connection", (socket) => {
       user.name = data.name;
       user.isVisible = true;
       user.image = data.image;
-      user.lastSeen = Date.now();
 
       broadcastUsers();
     }
@@ -80,33 +56,33 @@ io.on("connection", (socket) => {
     const user = users.find((u) => u.id === socket.id);
     if (user) {
       user.isVisible = isVisible;
-      user.lastSeen = Date.now();
       broadcastUsers();
     }
   });
 
   socket.on("create-ticket", (ticket) => {
-    if (ticket && ticket.id && ticket.lat && ticket.lng && 
-        ticket.message && ticket.creatorId && ticket.creatorName) {
-      tickets.push(ticket);
-      io.emit("new-ticket", ticket);
-      io.emit("all-tickets", tickets);
+    // Basic validation to ensure all required fields are present
+    if (
+      ticket &&
+      ticket.id &&
+      ticket.lat &&
+      ticket.lng &&
+      ticket.message &&
+      ticket.creatorId &&
+      ticket.creatorName
+    ) {
+      tickets.push(ticket); // Add the ticket to the tickets array
+      io.emit("new-ticket", ticket); // Notify all clients about the new ticket
+      io.emit("all-tickets", tickets); // Notify all clients with the updated ticket list.
     } else {
       console.error("Invalid ticket data received:", ticket);
     }
   });
 
   socket.on("disconnect", () => {
-    console.log(`User disconnected: ${socket.id}`);
-    activeConnections.delete(socket.id);
-    
-    const user = users.find(u => u.id === socket.id);
-    if (user) {
-      user.isConnected = false;
-      user.lastSeen = Date.now();
-    }
-    
+    users = users.filter((u) => u.id !== socket.id);
     broadcastUsers();
+    console.log(`User disconnected: ${socket.id}`);
   });
 
   function broadcastUsers() {
@@ -117,17 +93,14 @@ io.on("connection", (socket) => {
         user.lng !== null &&
         user.name !== null &&
         user.role !== null &&
-        user.image !== null &&
-        (user.isConnected || Date.now() - user.lastSeen < 300000) // Show recently active users
+        user.image !== null
     );
 
     io.emit("nearby-users", validUsers);
-    io.emit("all-tickets", tickets);
+    io.emit("all-tickets", tickets); // Send all tickets to newly connected clients
   }
 
-  // Send initial data
-  socket.emit("all-tickets", tickets);
-  broadcastUsers();
+  broadcastUsers(); // Send initial users and tickets list
 });
 
 server.listen(PORT, () => {
