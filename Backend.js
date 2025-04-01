@@ -11,8 +11,8 @@ const io = socketIo(server, {
     origin: ["https://synchro-kappa.vercel.app", "http://localhost:3000"],
     methods: ["GET", "POST"],
   },
-  pingTimeout: 60000, // 60 seconds without heartbeat
-  pingInterval: 25000, // Send ping every 25 seconds
+  pingTimeout: 60000,
+  pingInterval: 25000,
 });
 
 app.use(cors());
@@ -20,30 +20,24 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 10000;
 
-// Enhanced user tracking
 let users = new Map();
 let tickets = [];
 
-// Cleanup old data every 5 minutes
+// Updated cleanup intervals
 setInterval(() => {
   const now = Date.now();
-  
-  // Cleanup old users (30 seconds since last heartbeat)
   users.forEach((user, id) => {
-    if (now - user.lastSeen > 30000) {
+    if (now - user.lastSeen > 300000) { // 5 minutes
       users.delete(id);
       console.log(`Removed inactive user: ${id}`);
     }
   });
-
-  // Cleanup old tickets (1 hour)
   tickets = tickets.filter(t => now - t.createdAt < 3600000);
-}, 300000);
+}, 60000); // Check every minute
 
 io.on("connection", (socket) => {
   console.log(`User connected: ${socket.id}`);
 
-  // Initialize user with presence tracking
   users.set(socket.id, {
     id: socket.id,
     lat: null,
@@ -56,7 +50,6 @@ io.on("connection", (socket) => {
     lastSeen: Date.now()
   });
 
-  // Presence tracking handlers
   socket.on("presence", (status) => {
     const user = users.get(socket.id);
     if (user) {
@@ -112,8 +105,7 @@ io.on("connection", (socket) => {
     console.log(`User disconnected (${reason}): ${socket.id}`);
     const user = users.get(socket.id);
     if (user) {
-      // Give 30 seconds to reconnect
-      user.status = "offline";
+      user.status = 'away';
       user.lastSeen = Date.now();
       broadcastUsers();
     }
@@ -126,7 +118,7 @@ io.on("connection", (socket) => {
 
   function broadcastUsers() {
     const validUsers = Array.from(users.values()).filter(user => 
-      user.status !== "offline" &&
+      user.status !== 'away' &&
       user.isVisible &&
       user.lat !== null &&
       user.lng !== null
@@ -138,7 +130,6 @@ io.on("connection", (socket) => {
     io.emit("all-tickets", tickets);
   }
 
-  // Send initial data
   socket.emit("all-tickets", tickets);
   broadcastUsers();
 });
