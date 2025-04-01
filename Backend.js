@@ -8,63 +8,25 @@ const server = http.createServer(app);
 
 const io = socketIo(server, {
   cors: {
-    origin: ["https://synchro-kappa.vercel.app", "http://localhost:3000"],
-    methods: ["GET", "POST"],
-    credentials: true
-  },
-  transports: ["websocket"], // Force WebSocket only
-  pingTimeout: 120000, // 2 minutes
-  pingInterval: 25000,
-  maxHttpBufferSize: 1e8, // 100MB
-  connectionStateRecovery: {
-    maxDisconnectionDuration: 300000, // 5 minutes
-    skipMiddlewares: true
-  }
-});
+    origin: ["https://synchro-kappa.vercel.app",           "https://localhost:3000"
+    ],
+          
 
-// Add security headers
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-  next();
+    methods: ["GET", "POST"],
+  },
 });
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json()); // Add this line to parse JSON request bodies
 
 const PORT = process.env.PORT || 10000;
-
-let users = new Map();
-let tickets = [];
-
-setInterval(() => {
-  const now = Date.now();
-  users.forEach((user, id) => {
-    if (now - user.lastSeen > 300000) {
-      users.delete(id);
-      console.log(`Removed inactive user: ${id}`);
-    }
-  });
-  tickets = tickets.filter(t => now - t.createdAt < 3600000);
-}, 60000);
+let users = [];
+let tickets = []; // Array to store tickets
 
 io.on("connection", (socket) => {
   console.log(`User connected: ${socket.id}`);
 
-  // Enhanced connection logging
-  socket.on('error', (error) => {
-    console.error(`Socket error (${socket.id}):`, error);
-  });
-
-  socket.on('reconnect_attempt', (attempt) => {
-    console.log(`Reconnect attempt ${attempt} for ${socket.id}`);
-  });
-
-  socket.on('reconnect_failed', () => {
-    console.error(`Reconnect failed for ${socket.id}`);
-  });
-
-  users.set(socket.id, {
+  users.push({
     id: socket.id,
     lat: null,
     lng: null,
@@ -72,97 +34,73 @@ io.on("connection", (socket) => {
     name: "Anonymous",
     role: "user",
     image: "",
-    status: "online",
-    lastSeen: Date.now(),
-    reconnectCount: 0
-  });
-
-  socket.on("presence", (status) => {
-    const user = users.get(socket.id);
-    if (user) {
-      user.status = status;
-      user.lastSeen = Date.now();
-      if (status === 'online') user.reconnectCount++;
-      broadcastUsers();
-    }
-  });
-
-  socket.on("heartbeat", () => {
-    const user = users.get(socket.id);
-    if (user) {
-      user.lastSeen = Date.now();
-      user.status = 'online';
-    }
   });
 
   socket.on("user-location", (data) => {
-    const user = users.get(socket.id);
-    if (user && data?.lat && data?.lng) {
-      Object.assign(user, {
-        lat: data.lat,
-        lng: data.lng,
-        role: data.role || "user",
-        name: data.name || "Anonymous",
-        image: data.image || "",
-        lastSeen: Date.now()
-      });
+    if (!data?.lat || !data?.lng || !data?.role) return;
+
+    const user = users.find((u) => u.id === socket.id);
+    if (user) {
+      user.lat = data.lat;
+      user.lng = data.lng;
+      user.role = data.role;
+      user.name = data.name;
+      user.isVisible = true;
+      user.image = data.image;
+
       broadcastUsers();
     }
   });
 
   socket.on("visibility-change", (isVisible) => {
-    const user = users.get(socket.id);
+    const user = users.find((u) => u.id === socket.id);
     if (user) {
       user.isVisible = isVisible;
-      user.lastSeen = Date.now();
       broadcastUsers();
     }
   });
 
   socket.on("create-ticket", (ticket) => {
-    if (validateTicket(ticket)) {
-      tickets.push({
-        ...ticket,
-        createdAt: Date.now(),
-        lastUpdated: Date.now()
-      });
-      io.emit("new-ticket", ticket);
-      broadcastTickets();
+    // Basic validation to ensure all required fields are present
+    if (
+      ticket &&
+      ticket.id &&
+      ticket.lat &&
+      ticket.lng &&
+      ticket.message &&
+      ticket.creatorId &&
+      ticket.creatorName
+    ) {
+      tickets.push(ticket); // Add the ticket to the tickets array
+      io.emit("new-ticket", ticket); // Notify all clients about the new ticket
+      io.emit("all-tickets", tickets); // Notify all clients with the updated ticket list.
+    } else {
+      console.error("Invalid ticket data received:", ticket);
     }
   });
 
-  socket.on("disconnect", (reason) => {
-    console.log(`User disconnected (${reason}): ${socket.id}`);
-    const user = users.get(socket.id);
-    if (user) {
-      user.status = reason === 'transport close' ? 'away' : 'offline';
-      user.lastSeen = Date.now();
-      broadcastUsers();
-    }
+  socket.on("disconnect", () => {
+    users = users.filter((u) => u.id !== socket.id);
+    broadcastUsers();
+    console.log(`User disconnected: ${socket.id}`);
   });
-
-  function validateTicket(ticket) {
-    return ticket?.id && ticket.lat && ticket.lng && 
-           ticket.message && ticket.creatorId && ticket.creatorName;
-  }
 
   function broadcastUsers() {
-    const validUsers = Array.from(users.values()).filter(user => 
-      user.status === 'online' &&
-      user.isVisible &&
-      user.lat !== null &&
-      user.lng !== null
+    const validUsers = users.filter(
+      (user) =>
+        user.isVisible &&
+        user.lat !== null &&
+        user.lng !== null &&
+        user.name !== null &&
+        user.role !== null &&
+        user.image !== null
     );
+
     io.emit("nearby-users", validUsers);
+    io.emit("all-tickets", tickets); // Send all tickets to newly connected clients
   }
 
-  function broadcastTickets() {
-    io.emit("all-tickets", tickets);
-  }
-
-  // Initial sync
-  socket.emit("all-tickets", tickets);
-  broadcastUsers();
+  broadcastUsers(); // Send initial users and tickets list
 });
 
 server.listen(PORT, () => {
