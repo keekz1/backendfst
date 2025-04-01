@@ -10,9 +10,23 @@ const io = socketIo(server, {
   cors: {
     origin: ["https://synchro-kappa.vercel.app", "http://localhost:3000"],
     methods: ["GET", "POST"],
+    credentials: true
   },
-  pingTimeout: 60000,
+  transports: ["websocket"], // Force WebSocket only
+  pingTimeout: 120000, // 2 minutes
   pingInterval: 25000,
+  maxHttpBufferSize: 1e8, // 100MB
+  connectionStateRecovery: {
+    maxDisconnectionDuration: 300000, // 5 minutes
+    skipMiddlewares: true
+  }
+});
+
+// Add security headers
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  next();
 });
 
 app.use(cors());
@@ -23,20 +37,32 @@ const PORT = process.env.PORT || 10000;
 let users = new Map();
 let tickets = [];
 
-// Updated cleanup intervals
 setInterval(() => {
   const now = Date.now();
   users.forEach((user, id) => {
-    if (now - user.lastSeen > 300000) { // 5 minutes
+    if (now - user.lastSeen > 300000) {
       users.delete(id);
       console.log(`Removed inactive user: ${id}`);
     }
   });
   tickets = tickets.filter(t => now - t.createdAt < 3600000);
-}, 60000); // Check every minute
+}, 60000);
 
 io.on("connection", (socket) => {
   console.log(`User connected: ${socket.id}`);
+
+  // Enhanced connection logging
+  socket.on('error', (error) => {
+    console.error(`Socket error (${socket.id}):`, error);
+  });
+
+  socket.on('reconnect_attempt', (attempt) => {
+    console.log(`Reconnect attempt ${attempt} for ${socket.id}`);
+  });
+
+  socket.on('reconnect_failed', () => {
+    console.error(`Reconnect failed for ${socket.id}`);
+  });
 
   users.set(socket.id, {
     id: socket.id,
@@ -47,7 +73,8 @@ io.on("connection", (socket) => {
     role: "user",
     image: "",
     status: "online",
-    lastSeen: Date.now()
+    lastSeen: Date.now(),
+    reconnectCount: 0
   });
 
   socket.on("presence", (status) => {
@@ -55,6 +82,7 @@ io.on("connection", (socket) => {
     if (user) {
       user.status = status;
       user.lastSeen = Date.now();
+      if (status === 'online') user.reconnectCount++;
       broadcastUsers();
     }
   });
@@ -63,6 +91,7 @@ io.on("connection", (socket) => {
     const user = users.get(socket.id);
     if (user) {
       user.lastSeen = Date.now();
+      user.status = 'online';
     }
   });
 
@@ -94,7 +123,8 @@ io.on("connection", (socket) => {
     if (validateTicket(ticket)) {
       tickets.push({
         ...ticket,
-        createdAt: Date.now()
+        createdAt: Date.now(),
+        lastUpdated: Date.now()
       });
       io.emit("new-ticket", ticket);
       broadcastTickets();
@@ -105,7 +135,7 @@ io.on("connection", (socket) => {
     console.log(`User disconnected (${reason}): ${socket.id}`);
     const user = users.get(socket.id);
     if (user) {
-      user.status = 'away';
+      user.status = reason === 'transport close' ? 'away' : 'offline';
       user.lastSeen = Date.now();
       broadcastUsers();
     }
@@ -118,7 +148,7 @@ io.on("connection", (socket) => {
 
   function broadcastUsers() {
     const validUsers = Array.from(users.values()).filter(user => 
-      user.status !== 'away' &&
+      user.status === 'online' &&
       user.isVisible &&
       user.lat !== null &&
       user.lng !== null
@@ -130,6 +160,7 @@ io.on("connection", (socket) => {
     io.emit("all-tickets", tickets);
   }
 
+  // Initial sync
   socket.emit("all-tickets", tickets);
   broadcastUsers();
 });
