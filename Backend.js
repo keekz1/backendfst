@@ -82,29 +82,31 @@ io.on("connection", (socket) => {
 
   console.log(`🔗 New connection: ${clientId} from ${clientIp}`);
 
-  // Location update handler
-  socket.on("user-location", (data) => {
+// location update handler
+socket.on("user-location", (data) => {
     if (!validateLocationData(data)) {
-      return socket.emit("error", { message: "Invalid location data" });
+        return socket.emit("error", { message: "Invalid location data" });
     }
 
     const user = users.find((u) => u.id === clientId);
     if (user) {
-      user.lat = data.lat;
-      user.lng = data.lng;
-      user.role = data.role;
-      user.name = data.name || "Anonymous";
-      user.isVisible = true;
+        user.lat = data.lat;
+        user.lng = data.lng;
+        user.role = data.role;
+        user.name = data.name || "Anonymous";
+        user.isVisible = true;
 
-      // Construct the full image URL
-      const imageUrl = `${req.protocol}://${req.get("host")}/images/${data.image}`;
-      user.image = data.image ? imageUrl : "";
+        // Corrected logic to construct the image URL
+        // We'll use a hardcoded base URL for simplicity
+        const baseUrl = "https://backendfst-ozrh.onrender.com";
+        const imageUrl = data.image ? `${baseUrl}/images/${data.image}` : "";
+        user.image = imageUrl;
 
-      connections.get(clientId).lastActivity = new Date();
+        connections.get(clientId).lastActivity = new Date();
 
-      broadcastUsers();
+        broadcastUsers();
     }
-  });
+});
 
   // Visibility toggle handler
   socket.on("visibility-change", (isVisible) => {
