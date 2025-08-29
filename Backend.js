@@ -13,6 +13,7 @@ const corsOptions = {
   origin: [
     "https://synchro-kappa.vercel.app",
     "https://www.wesynchro.com",
+    "https://api.wesynchro.com",
     "https://localhost:3000"
   ],
   methods: ["GET", "POST", "OPTIONS"],
